@@ -30,3 +30,35 @@ $borderColor                = #E3E3E3
   input.kdinput.text
     opacity                 0.5
 
+.StackEditorView--header-subHeader
+    abs                     83px 0 0 41px
+    display                 flex
+    height                  20px
+    font-size               13px
+    font-weight             300
+    .edit-name
+      color                 #67A2EE
+      text-decoration       none
+      margin-right          10px
+
+    .cloned-from-text
+      color                 #A59999
+      max-width             300px
+      ellipsis()
+
+      &:before
+        content               ''
+        rel()
+        borderBox()
+        dIBlock()
+        border              3px solid #A59999
+        rounded             100%
+        top                 -1px
+        margin-right        5px
+
+    .cloned-from
+      color #67A2EE
+      cursor pointer
+      display initial
+      font-size 13px
+
