@@ -1,0 +1,39 @@
+#!/bin/bash
+
+set -o xtrace
+
+function repeat () {
+  INTERVAL=$1
+  TRY_COUNT=$2
+  COUNTER=0
+
+  shift 2
+
+  until "$@"; do
+    COUNTER=$((COUNTER + 1))
+    if [ $COUNTER -eq $TRY_COUNT ]; then
+      echo "failed: $@"
+      return 1
+    fi
+    echo "pending: $@"
+    sleep $INTERVAL
+  done
+
+  echo "succeeded: $@"
+  return 0
+}
+
+function health_check () {
+  HOST=$3
+  OUTPUT=$(curl --silent --dump-header /dev/stdout "http://$HOST/-/healthCheck")
+  STATUS_LINE=$(echo "$OUTPUT" | head -n1)
+  STATUS_LINE=$(echo "$STATUS_LINE" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
+  if [ "$STATUS_LINE" != "HTTP/1.1 200 OK" ]; then
+    return 1
+  fi
+
+  return 0
+}
+
+repeat 1m 5 health_check $(cat $1):8090

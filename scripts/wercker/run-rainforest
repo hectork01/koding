@@ -1,0 +1,23 @@
+#!/bin/bash
+
+set -o errexit
+
+declare hostname=$(head --lines 1 $1 | awk '{print $3}')
+declare revision=$(git rev-parse --short HEAD)
+
+for file in $(ls -1 tests/spec/rainforest/*.rfml); do
+  sed --in-place --expression "s/{{site.host}}/$hostname:8090/" $file
+done
+
+until rainforest --token $RAINFOREST_TOKEN upload --test-folder tests/spec/rainforest; do
+  sleep 5
+done
+
+git checkout tests/
+
+rainforest --token $RAINFOREST_TOKEN \
+           --description "$revision on $hostname" \
+           --site-id $RAINFOREST_SITE_ID \
+           --custom-url http://$hostname:8090 \
+           --tag automated \
+           run
