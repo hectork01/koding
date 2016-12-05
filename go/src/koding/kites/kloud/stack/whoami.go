@@ -16,6 +16,16 @@ type Team struct {
 	Subscription string `json:"subscription,omitempty"`
 }
 
+// IsSubActive checks if Team's subscription is active.
+func (t *Team) IsSubActive() bool {
+	switch t.Subscription {
+	case models.PaymentStatusActive, models.PaymentStatusTrailing:
+		return true
+	default:
+		return false
+	}
+}
+
 // WhoamiResponse represents a response value for a "team.whoami" kite method.
 type WhoamiResponse struct {
 	Team *Team `json:"team"`
