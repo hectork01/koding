@@ -139,11 +139,12 @@ module.exports = (options, credentials) ->
 
     kontrolUrl: kontrol.url
     registerUrl: "#{options.customDomain.public}/kloud/kite"
-    remoteApiUrl: "#{options.customDomain.public}/remote.api"
+    remoteApiUrl: "#{options.customDomain.local}/remote.api"
     tunnelUrl: "#{options.tunnelUrl}"
     klientUrl: "https://s3.amazonaws.com/koding-klient/development/latest/klient.deb"
 
     credentialEndPoint: "#{socialApiProxyUrl}/credential"
+    socialProxyURL: "#{socialApiProxyUrl}"
 
     janitorSecretKey: credentials.janitor.secretKey
     terraformerSecretKey: credentials.terraformer.secretKey
@@ -211,8 +212,13 @@ module.exports = (options, credentials) ->
       kloud            : "#{options.publicHostname}/kloud/kite",
       kontrol          : "#{options.publicHostname}/kontrol/kite",
       kodingBase       : "#{options.publicHostname}",
-      remoteAPI        : "#{options.publicHostname}/remote.api",
+      remoteAPI        :
+        public         : "#{options.customDomain.public}/remote.api"
+        private        : "#{options.customDomain.local}/remote.api"
       tunnelServer     : "#{options.tunnelUrl}/kite"
+      socialAPI        :
+        public         : "#{options.customDomain.public}/api/social"
+        private        : "#{options.customDomain.local}/api/social"
     routes             :
       'dev.koding.com' : '127.0.0.1'
 

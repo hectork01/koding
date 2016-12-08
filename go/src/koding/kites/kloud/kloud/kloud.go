@@ -8,15 +8,18 @@ import (
 	"log"
 	_ "net/http/pprof"
 	"net/url"
+	"socialapi/workers/presence/client"
 	"strings"
 	"time"
 
 	"golang.org/x/net/context"
 
+	"koding/api"
 	"koding/artifact"
 	"koding/db/mongodb/modelhelper"
 	"koding/httputil"
 	"koding/kites/common"
+	"koding/kites/config"
 	"koding/kites/keygen"
 	"koding/kites/kloud/contexthelper/publickeys"
 	"koding/kites/kloud/contexthelper/session"
@@ -27,6 +30,7 @@ import (
 	"koding/kites/kloud/queue"
 	"koding/kites/kloud/stack"
 	"koding/kites/kloud/stack/provider"
+	"koding/kites/kloud/team"
 	"koding/kites/kloud/terraformer"
 	"koding/kites/kloud/userdata"
 	"koding/remoteapi"
@@ -135,7 +139,10 @@ type Config struct {
 	TerraformerSecretKey string
 
 	// RemoteAPIURL configures the endpoint URL for remote.api.
-	RemoteAPIURL string
+	RemoteAPIURL *config.URL `required:"true"`
+
+	// SocialProxyURL configures the endpoint URL for internal socialapi proxy host.
+	SocialProxyURL string
 }
 
 // New gives new, registered kloud kite.
@@ -185,23 +192,16 @@ func New(conf *Config) (*Kloud, error) {
 		sess.Log.Warning(`disabling "Sneaker" for storing stack credential data`)
 	}
 
-	var remoteURL *url.URL
+	restClient := httputil.DefaultRestClient(conf.DebugMode)
 
-	if conf.RemoteAPIURL != "" {
-		if u, err := url.Parse(conf.RemoteAPIURL); err == nil {
-			remoteURL = u
-		}
-	}
-
-	if remoteURL == nil {
-		sess.Log.Warning(`disabling "remote.api" for stack operations`)
-	}
+	pinger := client.NewInternal(conf.SocialProxyURL)
+	pinger.HTTPClient = restClient
 
 	storeOpts := &credential.Options{
 		MongoDB: sess.DB,
 		Log:     sess.Log.New("stackcred"),
 		CredURL: credURL,
-		Client:  httputil.DefaultRestClient(conf.DebugMode),
+		Client:  restClient,
 	}
 
 	userPrivateKey, userPublicKey := userMachinesKeys(conf.UserPublicKey, conf.UserPrivateKey)
@@ -235,12 +235,34 @@ func New(conf *Config) (*Kloud, error) {
 		},
 	}
 
+	authFn := func(opts *api.AuthOptions) (*api.Session, error) {
+		s, err := modelhelper.FetchOrCreateSession(opts.User.Username, opts.User.Team)
+		if err != nil {
+			return nil, err
+		}
+
+		return &api.Session{
+			ClientID: s.ClientId,
+			User: &api.User{
+				Username: s.Username,
+				Team:     s.GroupName,
+			},
+		}, nil
+	}
+
+	transport := &api.Transport{
+		RoundTripper: storeOpts.Client.Transport,
+		AuthFunc:     api.NewCache(authFn).Auth,
+	}
+
 	kloud.Stack.DescribeFunc = provider.Desc
 	kloud.Stack.CredClient = credential.NewClient(storeOpts)
 	kloud.Stack.MachineClient = machine.NewClient(machine.NewMongoDatabase())
+	kloud.Stack.TeamClient = team.NewClient(team.NewMongoDatabase())
 	kloud.Stack.RemoteClient = &remoteapi.Client{
-		Endpoint: remoteURL,
-		Client:   storeOpts.Client,
+		Client:    storeOpts.Client,
+		Transport: transport,
+		Endpoint:  conf.RemoteAPIURL.URL,
 	}
 
 	kloud.Stack.ContextCreator = func(ctx context.Context) context.Context {
@@ -302,7 +324,11 @@ func New(conf *Config) (*Kloud, error) {
 	k.HandleFunc("credential.add", kloud.Stack.CredentialAdd)
 
 	// Authorization handling.
-	k.HandleFunc("auth.login", kloud.Stack.AuthLogin)
+	k.HandleFunc("auth.login", kloud.Stack.AuthLogin(pinger))
+
+	// Team handling.
+	k.HandleFunc("team.list", kloud.Stack.TeamList)
+	k.HandleFunc("team.whoami", kloud.Stack.TeamWhoami)
 
 	// Machine handling.
 	k.HandleFunc("machine.list", kloud.Stack.MachineList)
